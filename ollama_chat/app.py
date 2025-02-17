@@ -5,6 +5,18 @@ from typing import Iterator
 from PIL import Image
 import io
 
+from db_utils import ChatDatabase
+
+# Initialize database
+db = ChatDatabase()
+
+def build_context(recent_messages, current_prompt):
+    context = "Previous conversation:\n"
+    for role, content in recent_messages:
+        context += f"{role}: {content}\n"
+    context += f"\nCurrent question: {current_prompt}\n"
+    return context
+
 def get_local_models():
     try:
         models = ollama.list()
@@ -18,15 +30,16 @@ def stream_chat(model: str, message: str, temperature: float, image=None) -> Ite
     try:
         options = {
             "temperature": temperature,
-            "num_gpu": 0,  # Force CPU usage
-            "num_thread": 2  # Reduce number of threads
         }
         
+        # Get semantically relevant context
+        relevant_messages = db.get_relevant_context(message)
+        context_prompt = build_context(relevant_messages, message)
+        
         if image:
-            # Convert image to base64 if image is provided
             stream = ollama.generate(
                 model=model,
-                prompt=message,
+                prompt=context_prompt,
                 images=[image],
                 options=options,
                 stream=True
@@ -34,7 +47,7 @@ def stream_chat(model: str, message: str, temperature: float, image=None) -> Ite
         else:
             stream = ollama.generate(
                 model=model,
-                prompt=message,
+                prompt=context_prompt,
                 options=options,
                 stream=True
             )
@@ -81,9 +94,12 @@ if prompt := st.chat_input("What would you like to ask?"):
             st.image(uploaded_image)
         st.markdown(prompt)
     
+    # Store user message in database
+    image_bytes = uploaded_image.getvalue() if uploaded_image else None
+    db.store_message("user", prompt, selected_model, image_bytes)
+    
     message_data = {"role": "user", "content": prompt}
     if uploaded_image:
-        image_bytes = uploaded_image.getvalue()
         message_data["image"] = image_bytes
     st.session_state.messages.append(message_data)
 
@@ -92,16 +108,15 @@ if prompt := st.chat_input("What would you like to ask?"):
         message_placeholder = st.empty()
         full_response = ""
         
-        # Stream the response
         for response_chunk in stream_chat(selected_model, prompt, temperature, image_bytes if uploaded_image else None):
-            if response_chunk:  # Only update if we got a valid response
+            if response_chunk:
                 full_response += response_chunk
                 message_placeholder.markdown(full_response + "▌")
         
-        # Final response without cursor
         if full_response:
             message_placeholder.markdown(full_response)
-            # Add assistant's message to chat history
+            # Store assistant's response in database
+            db.store_message("assistant", full_response, selected_model)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
         else:
             st.error("No response received from the model. Please check if Ollama is running correctly.")
