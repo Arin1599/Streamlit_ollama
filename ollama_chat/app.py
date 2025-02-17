@@ -5,6 +5,11 @@ from typing import Iterator
 from PIL import Image
 import io
 
+# Disable Streamlit's file watcher
+import os
+os.environ['STREAMLIT_SERVER_FILE_WATCHER'] = 'false'
+
+
 from db_utils import ChatDatabase
 
 # Initialize database

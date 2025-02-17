@@ -4,7 +4,7 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 
 class ChatDatabase:
-    def __init__(self, db_path="ollama_chat\chat_history.db"):
+    def __init__(self, db_path="E:\Python\LLM\Streamlit_ollama\ollama_chat\chat_history.db"):
         self.db_path = db_path
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
         self.init_db()
